@@ -21,7 +21,6 @@ function MapUpdater({ center, zoom }) {
   useEffect(() => {
     if (center) {
       map.setView(center, zoom);
-      // Force map to recalculate size
       setTimeout(() => {
         map.invalidateSize();
       }, 100);
@@ -30,6 +29,130 @@ function MapUpdater({ center, zoom }) {
   
   return null;
 }
+
+// Enhanced Speed Calculator Class
+class SpeedCalculator {
+  constructor() {
+    this.lastLocation = null;
+    this.lastTime = null;
+    this.speedBuffer = [];
+    this.stationaryCounter = 0;
+    this.SPEED_THRESHOLD = 1.0; // km/h
+    this.DISTANCE_THRESHOLD = 3.0; // meters
+    this.TIME_THRESHOLD = 1000; // ms
+    this.BUFFER_SIZE = 5;
+    this.maxStationaryReadings = 3;
+  }
+
+  calculate(location, currentTime) {
+    // If no previous data, initialize
+    if (!this.lastLocation || !this.lastTime) {
+      this.lastLocation = location;
+      this.lastTime = currentTime;
+      return 0;
+    }
+
+    const timeDiff = currentTime - this.lastTime;
+    
+    // Ignore updates that are too frequent (< 500ms) or too old (> 10s)
+    if (timeDiff < 500 || timeDiff > 10000) {
+      return this.getCurrentSpeed();
+    }
+
+    // Calculate distance using Haversine formula
+    const distance = this.haversineDistance(
+      this.lastLocation.coords.latitude,
+      this.lastLocation.coords.longitude,
+      location.coords.latitude,
+      location.coords.longitude
+    );
+
+    // Check if movement is significant
+    if (distance < this.DISTANCE_THRESHOLD) {
+      this.stationaryCounter++;
+      
+      // If stationary for consecutive readings, return 0 and reset buffer
+      if (this.stationaryCounter >= this.maxStationaryReadings) {
+        this.speedBuffer = Array(this.BUFFER_SIZE).fill(0);
+        return 0;
+      }
+      
+      return this.getCurrentSpeed();
+    } else {
+      this.stationaryCounter = 0;
+    }
+
+    // Calculate raw speed (km/h)
+    const rawSpeed = (distance / 1000) / (timeDiff / 3600000);
+    
+    // Filter unrealistic speeds (max 25 km/h for running)
+    if (rawSpeed > 25 || rawSpeed < 0) {
+      console.log('Filtered unrealistic speed:', rawSpeed);
+      return this.getCurrentSpeed();
+    }
+
+    // Apply smoothing with moving average
+    this.speedBuffer.push(rawSpeed);
+    if (this.speedBuffer.length > this.BUFFER_SIZE) {
+      this.speedBuffer.shift();
+    }
+
+    // Update references
+    this.lastLocation = location;
+    this.lastTime = currentTime;
+
+    return this.getCurrentSpeed();
+  }
+
+  getCurrentSpeed() {
+    if (this.speedBuffer.length === 0) return 0;
+    
+    // Calculate median (more robust to outliers than average)
+    const sortedBuffer = [...this.speedBuffer].sort((a, b) => a - b);
+    const medianSpeed = sortedBuffer[Math.floor(sortedBuffer.length / 2)];
+    
+    // Apply threshold - if below threshold, return 0
+    return medianSpeed < this.SPEED_THRESHOLD ? 0 : medianSpeed;
+  }
+
+  haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    
+    return R * c;
+  }
+
+  reset() {
+    this.lastLocation = null;
+    this.lastTime = null;
+    this.speedBuffer = [];
+    this.stationaryCounter = 0;
+  }
+}
+
+// Distance calculation function
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000; // Earth radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  
+  return (R * c) / 1000; // Return in kilometers
+};
 
 const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
   const [isTracking, setIsTracking] = useState(false);
@@ -43,11 +166,13 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [gpsError, setGpsError] = useState(null);
   const [activeBoosts, setActiveBoosts] = useState([]);
+  const [speedStability, setSpeedStability] = useState('stable');
   
   const watchIdRef = useRef(null);
   const startTimeRef = useRef(null);
   const pauseTimeRef = useRef(null);
   const intervalRef = useRef(null);
+  const speedCalculatorRef = useRef(new SpeedCalculator());
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -91,6 +216,21 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     return () => clearInterval(timeInterval);
   }, []);
 
+  // Monitor speed stability
+  useEffect(() => {
+    const checkStability = () => {
+      if (speed < 0.5) {
+        setSpeedStability('stationary');
+      } else if (speed > 0.5 && speed < 20) {
+        setSpeedStability('stable');
+      } else {
+        setSpeedStability('unstable');
+      }
+    };
+
+    checkStability();
+  }, [speed]);
+
   // Get initial position on mount
   useEffect(() => {
     if (navigator.geolocation) {
@@ -116,7 +256,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
         }
       );
 
-      // Watch position continuously
+      // Watch position continuously when not tracking
       const watchId = navigator.geolocation.watchPosition(
         (position) => {
           if (!isTracking) {
@@ -147,19 +287,6 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     }
   }, [isTracking]);
 
-  // Calculate distance
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-
   // Start tracking
   const startTracking = () => {
     if (!navigator.geolocation) {
@@ -171,6 +298,14 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     setIsTracking(true);
     setIsPaused(false);
     startTimeRef.current = Date.now();
+    speedCalculatorRef.current.reset();
+    
+    // Reset tracking data
+    setRoute([]);
+    setDistance(0);
+    setDuration(0);
+    setSpeed(0);
+    setCalories(0);
     
     // Start duration timer
     intervalRef.current = setInterval(() => {
@@ -183,19 +318,20 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     // Watch position for tracking
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
-        const { latitude, longitude, accuracy, speed: gpsSpeed } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
+        const currentTime = Date.now();
         
         console.log('Position update:', { latitude, longitude, accuracy });
         
-        if (accuracy < 100) {
+        if (accuracy < 50) { // Only accept accurate readings (< 50m)
           const newPoint = [latitude, longitude];
           setCurrentPosition(newPoint);
           
-          // Update speed
-          if (gpsSpeed !== null && gpsSpeed >= 0) {
-            setSpeed(Math.max(0, gpsSpeed * 3.6)); // m/s to km/h
-          }
+          // Calculate smoothed speed
+          const smoothedSpeed = speedCalculatorRef.current.calculate(position, currentTime);
+          setSpeed(Math.max(0, smoothedSpeed));
           
+          // Update route and distance
           setRoute((prevRoute) => {
             if (prevRoute.length > 0) {
               const lastPoint = prevRoute[prevRoute.length - 1];
@@ -204,15 +340,24 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
                 latitude, longitude
               );
               
-              // Add if moved more than 3 meters
-              if (dist > 0.003) {
-                setDistance((prev) => prev + dist);
+              // Only add point if moved more than 5 meters
+              if (dist > 0.005 && smoothedSpeed > 1) {
+                setDistance((prev) => {
+                  const newDist = prev + dist;
+                  // Update calories based on distance
+                  setCalories(Math.round(newDist * 60));
+                  return newDist;
+                });
                 return [...prevRoute, newPoint];
               }
               return prevRoute;
             }
             return [newPoint];
           });
+          
+          setGpsError(null);
+        } else {
+          setGpsError(`Low GPS accuracy: ${accuracy.toFixed(1)}m`);
         }
       },
       (error) => {
@@ -221,9 +366,9 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 60000,
-        distanceFilter: 3
+        timeout: 10000,
+        maximumAge: 0, // Always get fresh position
+        distanceFilter: 5 // Minimum 5 meters between updates
       }
     );
   };
@@ -244,12 +389,15 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
   const stopTracking = async () => {
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
     }
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
 
     setIsTracking(false);
+    speedCalculatorRef.current.reset();
 
     // Save run to backend
     if (distance > 0 && route.length > 1) {
@@ -262,38 +410,34 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 
           const runData = {
             distance: parseFloat(distance.toFixed(2)),
-            duration: Math.floor(duration / 60), // Convert to minutes
+            duration: duration,
             pace: distance > 0 ? parseFloat((duration / 60 / distance).toFixed(2)) : 0,
-            calories,
+            calories: calories || Math.round(distance * 60),
             route: {
+              type: "LineString",
               coordinates: route.map(point => [point[1], point[0]]) // Convert to [lng, lat]
+            },
+            startLocation: {
+              type: "Point",
+              coordinates: [route[0][1], route[0][0]] // [lng, lat]
+            },
+            endLocation: {
+              type: "Point",
+              coordinates: [route[route.length - 1][1], route[route.length - 1][0]]
             }
           };
 
-          await axios.post(`${API_URL}/runs`, runData, config);
+          const response = await axios.post(`${API_URL}/runs`, runData, config);
           alert(`Run Saved! 🎉\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\nCalories: ${calories}`);
         }
       } catch (error) {
         console.error('Error saving run:', error);
-        alert(`Run Complete!\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\n(Could not save to server)`);
+        alert(`Run Complete!\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\nCalories: ${calories}\n(Could not save to server)`);
       }
+    } else {
+      alert('No valid run data to save.');
     }
-    
-    // Reset
-    setRoute([]);
-    setDistance(0);
-    setDuration(0);
-    setSpeed(0);
-    setCalories(0);
-    setIsPaused(false);
   };
-
-  // Calculate calories
-  useEffect(() => {
-    if (distance > 0) {
-      setCalories(Math.round(distance * 60));
-    }
-  }, [distance]);
 
   // Format time
   const formatTime = (seconds) => {
@@ -305,6 +449,16 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 
   const defaultCenter = currentPosition || [22.4734, 82.5194];
   const mapZoom = currentPosition ? 17 : 13;
+
+  // Speed display color based on stability
+  const getSpeedColor = () => {
+    switch(speedStability) {
+      case 'stationary': return 'text-gray-600';
+      case 'stable': return 'text-green-600';
+      case 'unstable': return 'text-yellow-600';
+      default: return 'text-blue-600';
+    }
+  };
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
@@ -325,30 +479,39 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
       {isTracking && (
         <div className="absolute top-20 left-4 right-4 z-[1000] max-w-4xl mx-auto">
           <div className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-2xl px-4 py-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="text-center">
-                <p className="text-2xl md:text-4xl font-bold text-purple-600">
+                <p className="text-2xl md:text-3xl font-bold text-purple-600">
                   {distance.toFixed(2)}
                 </p>
-                <p className="text-xs text-gray-600 font-medium">km</p>
+                <p className="text-xs text-gray-600 font-medium">Distance (km)</p>
               </div>
               
               <div className="text-center">
-                <p className="text-2xl md:text-4xl font-bold text-blue-600">
+                <p className={`text-2xl md:text-3xl font-bold ${getSpeedColor()}`}>
                   {speed.toFixed(1)}
                 </p>
-                <p className="text-xs text-gray-600 font-medium">km/h</p>
+                <p className="text-xs text-gray-600 font-medium">
+                  Speed {speedStability === 'stationary' ? '(Stopped)' : '(km/h)'}
+                </p>
               </div>
               
               <div className="text-center">
-                <p className="text-2xl md:text-4xl font-bold text-green-600">
+                <p className="text-2xl md:text-3xl font-bold text-blue-600">
                   {formatTime(duration)}
                 </p>
-                <p className="text-xs text-gray-600 font-medium">h:m:s</p>
+                <p className="text-xs text-gray-600 font-medium">Duration</p>
               </div>
               
               <div className="text-center">
-                <p className="text-2xl md:text-4xl font-bold text-orange-500">
+                <p className="text-2xl md:text-3xl font-bold text-orange-500">
+                  {calories}
+                </p>
+                <p className="text-xs text-gray-600 font-medium">Calories</p>
+              </div>
+              
+              <div className="text-center">
+                <p className="text-xl md:text-2xl font-bold text-gray-700">
                   {currentTime.toLocaleTimeString('en-US', { 
                     hour: '2-digit', 
                     minute: '2-digit',
@@ -365,10 +528,12 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
       )}
 
       {/* GPS Error Alert */}
-      {gpsError && !isTracking && (
-        <div className="absolute top-20 left-4 right-4 z-[1000] max-w-2xl mx-auto">
-          <div className="bg-yellow-500/90 backdrop-blur-lg rounded-xl px-6 py-3 text-white text-sm font-medium shadow-lg text-center">
-            ⚠️ GPS: {gpsError} - Using approximate location
+      {gpsError && (
+        <div className="absolute top-4 right-4 z-[1000] max-w-md">
+          <div className={`${
+            gpsError.includes('Low GPS accuracy') ? 'bg-yellow-500' : 'bg-red-500'
+          }/90 backdrop-blur-lg rounded-xl px-4 py-2 text-white text-sm font-medium shadow-lg text-center`}>
+            ⚠️ {gpsError}
           </div>
         </div>
       )}
@@ -400,6 +565,9 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
               <Popup>
                 <div className="text-center">
                   <p className="font-bold">You are here</p>
+                  <p className="text-sm">Lat: {currentPosition[0].toFixed(6)}</p>
+                  <p className="text-sm">Lng: {currentPosition[1].toFixed(6)}</p>
+                  <p className="text-sm">Speed: {speed.toFixed(1)} km/h</p>
                   {gpsError && <p className="text-xs text-red-600">{gpsError}</p>}
                 </div>
               </Popup>
@@ -410,8 +578,8 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
             <Polyline
               positions={route}
               color="#8B5CF6"
-              weight={5}
-              opacity={0.8}
+              weight={4}
+              opacity={0.7}
             />
           )}
 
@@ -488,6 +656,19 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
           )}
         </div>
       </div>
+
+      {/* Status Indicator */}
+      {isTracking && (
+        <div className="absolute bottom-36 left-0 right-0 z-[1000] flex justify-center px-4">
+          <div className={`${
+            speedStability === 'stationary' ? 'bg-gray-500' :
+            speedStability === 'stable' ? 'bg-green-500' : 'bg-yellow-500'
+          }/90 backdrop-blur-lg rounded-full px-6 py-2 text-white text-sm font-medium shadow-lg`}>
+            Status: {speedStability === 'stationary' ? 'Stopped' : 
+                    speedStability === 'stable' ? 'Moving Smoothly' : 'GPS Adjusting'}
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex-shrink-0 bg-gray-800 text-white py-3 text-center text-sm">
