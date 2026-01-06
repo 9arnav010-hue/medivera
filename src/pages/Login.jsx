@@ -152,7 +152,7 @@ export default function Login({ setCurrentPage, setIsLoggedIn, setUser, isDarkMo
               Welcome Back
             </h2>
             <p className={`${isDarkMode ? 'text-purple-300' : 'text-purple-600'}`}>
-              Sign in to continue to HealthSphere.AI
+              Sign in to continue to Medivéra
             </p>
           </motion.div>
 
@@ -320,4 +320,5 @@ function AnimatedBackground({ isDarkMode }) {
       ))}
     </div>
   );
+
 }
