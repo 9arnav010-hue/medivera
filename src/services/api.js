@@ -19,7 +19,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // 15 second timeout
+  timeout: 40000, // 15 second timeout
   withCredentials: false, // Render doesn't need credentials for CORS
 });
 
@@ -176,3 +176,4 @@ export const healthAPI = {
 };
 
 export default api;
+
