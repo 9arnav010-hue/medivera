@@ -260,7 +260,7 @@ export default function Login({ setCurrentPage, setIsLoggedIn, setUser, isDarkMo
               <span className={`px-2 ${
                 isDarkMode ? 'bg-gray-900 text-purple-300' : 'bg-white text-purple-600'
               }`}>
-                New to HealthSphere.AI?
+                New to Medivéra?
               </span>
             </div>
           </div>
@@ -322,3 +322,4 @@ function AnimatedBackground({ isDarkMode }) {
   );
 
 }
+
