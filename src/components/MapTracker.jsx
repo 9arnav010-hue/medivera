@@ -354,7 +354,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     }
   };
 
-  // Stop tracking and save to backend - FIXED COORDINATE FORMAT
+  // Stop tracking and save to backend - FIXED FOR MONGOOSE SCHEMA
   const stopTracking = async () => {
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -376,10 +376,10 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
             headers: { Authorization: `Bearer ${token}` }
           };
 
-          // CRITICAL FIX: Convert [lat, lng] to [lng, lat] and ensure they're flat numbers
+          // Transform coordinates to match mongoose schema: [lng, lat] pairs
           const routeCoordinates = route.map(point => [
-            Number(point[1].toFixed(7)), // longitude
-            Number(point[0].toFixed(7))  // latitude
+            Number(point[1].toFixed(7)), // longitude first
+            Number(point[0].toFixed(7))  // latitude second
           ]);
 
           const startCoords = [
@@ -712,4 +712,3 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 };
 
 export default MapTracker;
-
