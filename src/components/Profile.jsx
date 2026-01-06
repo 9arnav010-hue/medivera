@@ -558,7 +558,7 @@ const Profile = ({ isDarkMode, user, setUser, stats, fetchStats }) => {
                             value={formData.phone}
                             onChange={handleChange}
                             disabled={!isEditing}
-                            placeholder="+1 (555) 000-0000"
+                            placeholder="+91 12345678790"
                             className={`w-full px-4 py-3 rounded-lg ${
                               isDarkMode 
                                 ? 'bg-white/5 text-white border-purple-500/30' 
@@ -1030,5 +1030,6 @@ const Profile = ({ isDarkMode, user, setUser, stats, fetchStats }) => {
     </div>
   );
 };
+
 
 export default Profile;
