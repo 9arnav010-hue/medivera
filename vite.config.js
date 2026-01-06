@@ -4,20 +4,29 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: '0.0.0.0', // Allows access from other devices / Render
+    host: true, // Better than '0.0.0.0' for Render
     port: 5173,
-
-    allowedHosts: ['medivera.onrender.com'], // ✅ FIX
-
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true,
-      }
-    },
-
+    strictPort: true, // Exit if port is taken
+    
+    // Add CORS headers for Render
+    cors: true,
+    
+    // Add this for Render WebSocket
     hmr: {
-      clientPort: 5173,
+      host: 'medivera.onrender.com',
+      clientPort: 443, // Render uses 443 for HTTPS
+    }
+  },
+  // IMPORTANT: Add preview config for production
+  preview: {
+    host: true,
+    port: 10000, // Render default preview port
+    strictPort: true
+  },
+  // IMPORTANT: For production API calls
+  build: {
+    rollupOptions: {
+      external: [], // Keep empty unless you need specific exclusions
     }
   }
 })
