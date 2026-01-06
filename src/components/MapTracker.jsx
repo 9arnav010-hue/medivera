@@ -704,7 +704,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 
       {/* Footer */}
       <div className="absolute bottom-0 left-0 right-0 bg-gray-900 text-white py-3 text-center text-sm border-t border-gray-800">
-        <p>© 2026 Medivera • Live Run Tracker</p>
+        <p>© 2026 Medivera - Created by Aksh & Arnav</p>
         <p className="text-xs mt-1 text-blue-400">The Future of Human-Centered Healthcare</p>
       </div>
     </div>
@@ -712,3 +712,4 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 };
 
 export default MapTracker;
+
