@@ -40,7 +40,7 @@ export default function Home({ setCurrentPage, isDarkMode, setIsDarkMode }) {
             transition={{ delay: 0.3, duration: 0.8 }}
             className="text-6xl md:text-8xl font-bold mb-6 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent"
           >
-            HealthSphere.AI
+            Medivéra
           </motion.h1>
 
           <motion.p
@@ -216,7 +216,7 @@ export default function Home({ setCurrentPage, isDarkMode, setIsDarkMode }) {
       } backdrop-blur-lg`}>
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className={`${isDarkMode ? 'text-purple-300' : 'text-purple-600'}`}>
-            © 2026 HealthSphere.AI - Created by Aksh & Arnav
+            © 2026 Medivéra - Created by Aksh & Arnav
           </p>
           <p className={`text-sm mt-2 ${isDarkMode ? 'text-purple-400' : 'text-purple-500'}`}>
             The Future of Human-Centered Healthcare
@@ -295,4 +295,5 @@ function AnimatedBackground({ isDarkMode }) {
       ))}
     </div>
   );
+
 }
