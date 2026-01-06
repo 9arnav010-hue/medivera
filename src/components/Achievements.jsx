@@ -10,7 +10,7 @@ const Achievements = ({ isDarkMode, onClose }) => {
   const [activeTab, setActiveTab] = useState('achievements'); // 'achievements' or 'badges'
   const [stats, setStats] = useState(null);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const API_URL = import.meta.env.VITE_API_URL || 'https://medivera-backend.onrender.com/api';
 
   useEffect(() => {
     loadAchievements();
@@ -555,5 +555,6 @@ function AchievementCard({ achievement, isDarkMode }) {
     </motion.div>
   );
 }
+
 
 export default Achievements;
