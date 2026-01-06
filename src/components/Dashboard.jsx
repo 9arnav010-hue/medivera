@@ -15,28 +15,33 @@ export default function Dashboard({ user, isDarkMode, setCurrentPage, stats: app
   const [loading, setLoading] = useState(true);
   const [selectedAchievement, setSelectedAchievement] = useState(null);
   const [showAchievements, setShowAchievements] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false); // CRITICAL FIX: Prevent multiple fetches
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    // CRITICAL FIX: Only fetch once
+    if (!hasFetched) {
+      fetchDashboardData();
+      setHasFetched(true);
+    }
+  }, [hasFetched]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      console.log('Dashboard: Fetching stats...');
+      console.log('📊 [DASHBOARD] Fetching stats...');
       
       const [statsResponse, achievementsResponse] = await Promise.all([
         achievementAPI.getUserStats(),
         achievementAPI.getAchievements()
       ]);
 
-      console.log('Dashboard: Stats response:', statsResponse.data);
+      console.log('📊 [DASHBOARD] Stats response:', statsResponse.data);
 
       if (statsResponse.data.success) {
         const fetchedStats = statsResponse.data;
         setLocalStats(fetchedStats);
         
-        // CRITICAL FIX: Update App.jsx stats state for Profile
+        // Update App.jsx stats state for Profile
         if (setAppStats) {
           const updatedAppStats = {
             totalChats: fetchedStats.stats?.totalChats || 0,
@@ -44,23 +49,22 @@ export default function Dashboard({ user, isDarkMode, setCurrentPage, stats: app
             totalVisionAnalysis: fetchedStats.stats?.totalVisionAnalysis || 0,
             achievementProgress: {
               completed: fetchedStats.achievementProgress?.completed || 0,
-              total: fetchedStats.achievementProgress?.total || 56,
+              total: fetchedStats.achievementProgress?.total || 60,
               percentage: fetchedStats.achievementProgress?.percentage || 0
             }
           };
           
-          console.log('Dashboard: Updating App stats:', updatedAppStats);
+          console.log('📊 [DASHBOARD] Updated App stats:', updatedAppStats);
           setAppStats(updatedAppStats);
-        } else {
-          console.error('Dashboard: setAppStats is not provided!');
         }
       }
 
       if (achievementsResponse.data.success) {
         setAchievements(achievementsResponse.data.achievements);
+        console.log(`📊 [DASHBOARD] Loaded ${achievementsResponse.data.achievements.length} achievements`);
       }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('❌ [DASHBOARD] Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -77,7 +81,8 @@ export default function Dashboard({ user, isDarkMode, setCurrentPage, stats: app
     const currentLevelXP = (localStats.stats.level - 1) * 100;
     const nextLevelXP = localStats.stats.level * 100;
     const currentXP = localStats.stats.totalXP;
-    return ((currentXP - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100;
+    const progress = ((currentXP - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100;
+    return Math.min(Math.max(progress, 0), 100); // Clamp between 0-100
   };
 
   if (loading) {
@@ -191,7 +196,7 @@ export default function Dashboard({ user, isDarkMode, setCurrentPage, stats: app
         <StatsCard 
           icon={Award} 
           title="Achievements" 
-          value={`${localStats?.achievementProgress.completed || 0}/${localStats?.achievementProgress.total || 56}`}
+          value={`${localStats?.achievementProgress.completed || 0}/${localStats?.achievementProgress.total || 60}`}
           trend={`${localStats?.achievementProgress.percentage || 0}%`}
           color="green" 
           isDarkMode={isDarkMode}
