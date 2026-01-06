@@ -185,7 +185,7 @@ export default function Register({ setCurrentPage, isDarkMode, setIsDarkMode }) 
             <h2 className={`text-3xl font-bold ${
               isDarkMode ? 'text-white' : 'text-gray-900'
             } mb-2`}>
-              Join HealthSphere.AI
+              Join Medivéra
             </h2>
             <p className={`${isDarkMode ? 'text-purple-300' : 'text-purple-600'}`}>
               Start your journey to better health
@@ -613,4 +613,5 @@ function AnimatedBackground({ isDarkMode }) {
       ))}
     </div>
   );
+
 }
