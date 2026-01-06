@@ -50,7 +50,13 @@ api.interceptors.request.use((config) => {
    RESPONSE INTERCEPTOR
 ======================= */
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Log response in development
+    if (import.meta.env.DEV) {
+      console.log(`📥 Response ${response.status} ${response.config.url}:`, response.data);
+    }
+    return response;
+  },
   (error) => {
     console.error('❌ API Error Details:');
     console.error('URL:', error.config?.url);
@@ -60,10 +66,6 @@ api.interceptors.response.use(
     console.error('Response Data:', error.response?.data); // ← Check this!
     console.error('Request Data:', error.config?.data);
     console.error('Full Error:', error.message);
-
-    // ... rest of your interceptor code
-  }
-);
 
     // Handle 401 Unauthorized
     if (error.response?.status === 401) {
@@ -174,4 +176,3 @@ export const healthAPI = {
 };
 
 export default api;
-
