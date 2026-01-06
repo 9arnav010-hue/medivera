@@ -37,14 +37,13 @@ class SpeedCalculator {
     this.lastTime = null;
     this.speedBuffer = [];
     this.stationaryCounter = 0;
-    this.SPEED_THRESHOLD = 0.8; // Lower threshold for better response
-    this.DISTANCE_THRESHOLD = 2.0; // meters
-    this.BUFFER_SIZE = 3; // Smaller buffer for faster response
+    this.SPEED_THRESHOLD = 0.8;
+    this.DISTANCE_THRESHOLD = 2.0;
+    this.BUFFER_SIZE = 3;
     this.lastValidSpeed = 0;
   }
 
   calculate(location, currentTime) {
-    // If no previous data, initialize
     if (!this.lastLocation || !this.lastTime) {
       this.lastLocation = location;
       this.lastTime = currentTime;
@@ -53,12 +52,10 @@ class SpeedCalculator {
 
     const timeDiff = currentTime - this.lastTime;
     
-    // Ignore updates that are too frequent (< 300ms) or too old (> 5s)
     if (timeDiff < 300 || timeDiff > 5000) {
       return this.lastValidSpeed;
     }
 
-    // Calculate distance using Haversine formula
     const distance = this.haversineDistance(
       this.lastLocation.coords.latitude,
       this.lastLocation.coords.longitude,
@@ -66,11 +63,9 @@ class SpeedCalculator {
       location.coords.longitude
     );
 
-    // Check if movement is significant
     if (distance < this.DISTANCE_THRESHOLD) {
       this.stationaryCounter++;
       
-      // If stationary for 2 consecutive readings, return 0
       if (this.stationaryCounter >= 2) {
         this.speedBuffer = [0, 0];
         this.lastValidSpeed = 0;
@@ -82,19 +77,15 @@ class SpeedCalculator {
       this.stationaryCounter = 0;
     }
 
-    // Calculate raw speed (km/h) - FASTER CALCULATION
     const rawSpeed = (distance / 1000) / (timeDiff / 3600000);
     
-    // Filter unrealistic speeds (max 30 km/h for running)
     if (rawSpeed > 30 || rawSpeed < 0) {
       return this.lastValidSpeed;
     }
 
-    // Apply smoothing with EXPONENTIAL moving average (faster response)
     if (this.speedBuffer.length === 0) {
       this.speedBuffer.push(rawSpeed);
     } else {
-      // 70% weight to new reading, 30% to old average (faster response)
       const smoothed = (rawSpeed * 0.7) + (this.speedBuffer[this.speedBuffer.length - 1] * 0.3);
       this.speedBuffer.push(smoothed);
     }
@@ -103,15 +94,12 @@ class SpeedCalculator {
       this.speedBuffer.shift();
     }
 
-    // Update references
     this.lastLocation = location;
     this.lastTime = currentTime;
     
-    // Use latest value for faster response
     const currentSpeed = this.speedBuffer[this.speedBuffer.length - 1];
     this.lastValidSpeed = currentSpeed;
     
-    // Apply threshold
     return currentSpeed < this.SPEED_THRESHOLD ? 0 : currentSpeed;
   }
 
@@ -244,7 +232,6 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
         }
       );
 
-      // Watch position continuously when not tracking
       const watchId = navigator.geolocation.watchPosition(
         (position) => {
           if (!isTracking) {
@@ -289,7 +276,6 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     speedCalculatorRef.current.reset();
     lastRouteUpdateRef.current = Date.now();
     
-    // Reset tracking data
     setRoute([]);
     setDistance(0);
     setDuration(0);
@@ -297,7 +283,6 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     setCalories(0);
     setSpeedHistory([]);
     
-    // Start duration timer
     intervalRef.current = setInterval(() => {
       if (!isPaused) {
         const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -305,23 +290,18 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
       }
     }, 1000);
 
-    // Watch position for tracking with HIGH FREQUENCY
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
         const { latitude, longitude, accuracy } = position.coords;
         const currentTime = Date.now();
         
-        if (accuracy < 30) { // Only accept accurate readings
+        if (accuracy < 30) {
           const newPoint = [latitude, longitude];
           setCurrentPosition(newPoint);
           
-          // Calculate speed with faster response
           const smoothedSpeed = speedCalculatorRef.current.calculate(position, currentTime);
-          
-          // Update speed with immediate feedback
           setSpeed(Math.max(0, Math.round(smoothedSpeed * 10) / 10));
           
-          // Update route and distance (FASTER UPDATES)
           setRoute((prevRoute) => {
             if (prevRoute.length > 0) {
               const lastPoint = prevRoute[prevRoute.length - 1];
@@ -330,11 +310,9 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
                 latitude, longitude
               );
               
-              // Only add point if moved more than 2 meters AND speed > 1 km/h
               if (dist > 0.002 && smoothedSpeed > 1) {
                 setDistance((prev) => {
                   const newDist = prev + dist;
-                  // Update calories based on distance and speed
                   setCalories(Math.round(newDist * 60 * (1 + smoothedSpeed / 20)));
                   return newDist;
                 });
@@ -359,7 +337,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
         enableHighAccuracy: true,
         timeout: 5000,
         maximumAge: 0,
-        distanceFilter: 1 // Minimum 1 meter between updates
+        distanceFilter: 1
       }
     );
   };
@@ -376,7 +354,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     }
   };
 
-  // Stop tracking and save to backend
+  // Stop tracking and save to backend - FIXED COORDINATE FORMAT
   const stopTracking = async () => {
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -390,7 +368,6 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     setIsTracking(false);
     speedCalculatorRef.current.reset();
 
-    // Save run to backend with CORRECTED DATA FORMAT
     if (distance > 0 && route.length > 1) {
       try {
         const token = localStorage.getItem('healthsphere_token');
@@ -399,46 +376,56 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
             headers: { Authorization: `Bearer ${token}` }
           };
 
-          // FIXED: Ensure proper GeoJSON format
+          // CRITICAL FIX: Convert [lat, lng] to [lng, lat] and ensure they're flat numbers
+          const routeCoordinates = route.map(point => [
+            Number(point[1].toFixed(7)), // longitude
+            Number(point[0].toFixed(7))  // latitude
+          ]);
+
+          const startCoords = [
+            Number(route[0][1].toFixed(7)), // longitude
+            Number(route[0][0].toFixed(7))  // latitude
+          ];
+
+          const endCoords = [
+            Number(route[route.length - 1][1].toFixed(7)), // longitude
+            Number(route[route.length - 1][0].toFixed(7))  // latitude
+          ];
+
           const runData = {
-            distance: parseFloat(distance.toFixed(3)),
-            duration: duration,
-            pace: distance > 0 ? parseFloat((duration / 60 / distance).toFixed(2)) : 0,
+            distance: Number(distance.toFixed(3)),
+            duration: Number(duration),
+            pace: distance > 0 ? Number((duration / 60 / distance).toFixed(2)) : 0,
             calories: calories || Math.round(distance * 60),
             route: {
               type: "LineString",
-              coordinates: route.map(point => {
-                // Ensure [lng, lat] format with numbers
-                return [
-                  parseFloat(point[1].toFixed(7)),
-                  parseFloat(point[0].toFixed(7))
-                ];
-              })
+              coordinates: routeCoordinates
             },
             startLocation: {
               type: "Point",
-              coordinates: [
-                parseFloat(route[0][1].toFixed(7)),
-                parseFloat(route[0][0].toFixed(7))
-              ]
+              coordinates: startCoords
             },
             endLocation: {
               type: "Point",
-              coordinates: [
-                parseFloat(route[route.length - 1][1].toFixed(7)),
-                parseFloat(route[route.length - 1][0].toFixed(7))
-              ]
+              coordinates: endCoords
             }
           };
 
-          console.log('Saving run data:', JSON.stringify(runData, null, 2));
+          console.log('Saving run with coordinates:', {
+            routeLength: routeCoordinates.length,
+            firstPoint: routeCoordinates[0],
+            lastPoint: routeCoordinates[routeCoordinates.length - 1],
+            start: startCoords,
+            end: endCoords
+          });
           
           const response = await axios.post(`${API_URL}/runs`, runData, config);
           alert(`Run Saved! 🎉\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\nCalories: ${calories}`);
         }
       } catch (error) {
         console.error('Error saving run:', error);
-        alert(`Run Complete!\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\nCalories: ${calories}\n(Could not save to server)`);
+        console.error('Error details:', error.response?.data);
+        alert(`Run Complete!\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\nCalories: ${calories}\n(Could not save to server: ${error.response?.data?.message || error.message})`);
       }
     } else {
       alert('No valid run data to save.');
@@ -456,12 +443,10 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
   const defaultCenter = currentPosition || [22.4734, 82.5194];
   const mapZoom = currentPosition ? 18 : 13;
 
-  // Speed status based on recent history
   const getSpeedStatus = () => {
     if (speed < 0.5) return 'stopped';
     if (speedHistory.length < 3) return 'starting';
     
-    // Check if speed is increasing
     const recentSpeeds = speedHistory.slice(-3).map(s => s.speed);
     const isIncreasing = recentSpeeds.every((s, i) => i === 0 || s >= recentSpeeds[i-1]);
     
@@ -473,31 +458,31 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
-      {/* Top Bar - Simplified */}
+      {/* Top Bar - Fixed with proper back button */}
       <div className="absolute top-0 left-0 right-0 z-[1001] bg-gradient-to-r from-purple-900/95 to-pink-900/95 backdrop-blur-lg shadow-lg">
         <div className="flex items-center justify-between px-4 py-3">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setCurrentPage('runner')}
-            className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-white/20 text-white"
+            className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="font-medium">Back</span>
           </motion.button>
           
-          <div className="text-center">
+          <div className="text-center flex-1">
             <h1 className="text-xl font-bold text-white">Map Tracker</h1>
             <p className="text-xs text-purple-200">Real-time running tracker</p>
           </div>
           
-          <div className="w-20"></div> {/* Spacer for alignment */}
+          <div className="w-24"></div>
         </div>
       </div>
 
-      {/* Stats Cards - Only show when tracking */}
+      {/* Stats Cards - Positioned correctly below header */}
       {isTracking && (
-        <div className="absolute top-16 left-4 right-4 z-[1000]">
+        <div className="absolute top-20 left-0 right-0 z-[1000] px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <motion.div 
               initial={{ y: -20, opacity: 0 }}
@@ -567,7 +552,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 
       {/* Speed Status Indicator */}
       {isTracking && speedStatus !== 'stopped' && (
-        <div className="absolute top-36 left-0 right-0 z-[1000] flex justify-center px-4">
+        <div className="absolute top-44 left-0 right-0 z-[1000] flex justify-center px-4">
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -586,29 +571,24 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 
       {/* GPS Error Alert */}
       {gpsError && (
-        <div className="absolute top-44 left-0 right-0 z-[1000] flex justify-center px-4">
+        <div className="absolute top-52 left-0 right-0 z-[1000] flex justify-center px-4">
           <div className="bg-red-500/90 backdrop-blur-lg rounded-xl px-4 py-2 text-white text-sm font-medium shadow-lg">
             ⚠️ {gpsError}
           </div>
         </div>
       )}
 
-      {/* Map */}
-      <div className="flex-1 w-full h-full mt-16">
+      {/* Map - Adjusted padding for stats */}
+      <div className={`flex-1 w-full ${isTracking ? 'pt-60' : 'pt-20'} pb-32`}>
         <MapContainer
           center={defaultCenter}
           zoom={mapZoom}
           className="w-full h-full"
           zoomControl={true}
           style={{ height: '100%', width: '100%' }}
-          whenCreated={(mapInstance) => {
-            setTimeout(() => {
-              mapInstance.invalidateSize();
-            }, 100);
-          }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxZoom={19}
           />
@@ -662,8 +642,8 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
         </MapContainer>
       </div>
 
-      {/* Control Buttons */}
-      <div className="absolute bottom-8 left-0 right-0 z-[1000] flex justify-center px-4">
+      {/* Control Buttons - Fixed positioning */}
+      <div className="absolute bottom-20 left-0 right-0 z-[1000] flex justify-center px-4">
         <div className="bg-white/95 backdrop-blur-lg rounded-full shadow-2xl p-3 flex gap-3">
           {!isTracking ? (
             <motion.button
@@ -723,7 +703,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
       )}
 
       {/* Footer */}
-      <div className="flex-shrink-0 bg-gray-900 text-white py-3 text-center text-sm border-t border-gray-800">
+      <div className="absolute bottom-0 left-0 right-0 bg-gray-900 text-white py-3 text-center text-sm border-t border-gray-800">
         <p>© 2026 Medivera • Live Run Tracker</p>
         <p className="text-xs mt-1 text-blue-400">The Future of Human-Centered Healthcare</p>
       </div>
