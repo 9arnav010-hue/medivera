@@ -30,7 +30,7 @@ function MapUpdater({ center, zoom }) {
   return null;
 }
 
-// Enhanced Speed Calculator with faster response
+// Enhanced Speed Calculator
 class SpeedCalculator {
   constructor() {
     this.lastLocation = null;
@@ -354,7 +354,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
     }
   };
 
-  // Stop tracking and save to backend - FIXED FOR MONGOOSE SCHEMA
+  // Stop tracking and save to backend
   const stopTracking = async () => {
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -376,10 +376,11 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
             headers: { Authorization: `Bearer ${token}` }
           };
 
-          // Transform coordinates to match mongoose schema: [lng, lat] pairs
+          // CRITICAL: GeoJSON uses [longitude, latitude] order
+          // Leaflet route array is [lat, lng] but MongoDB needs [lng, lat]
           const routeCoordinates = route.map(point => [
-            Number(point[1].toFixed(7)), // longitude first
-            Number(point[0].toFixed(7))  // latitude second
+            Number(point[1].toFixed(7)), // longitude (index 1)
+            Number(point[0].toFixed(7))  // latitude (index 0)
           ]);
 
           const startCoords = [
@@ -411,24 +412,36 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
             }
           };
 
-          console.log('Saving run with coordinates:', {
-            routeLength: routeCoordinates.length,
-            firstPoint: routeCoordinates[0],
-            lastPoint: routeCoordinates[routeCoordinates.length - 1],
+          console.log('✅ Saving run with GeoJSON [lng, lat]:', {
+            totalPoints: routeCoordinates.length,
+            firstCoord: routeCoordinates[0],
+            lastCoord: routeCoordinates[routeCoordinates.length - 1],
             start: startCoords,
             end: endCoords
           });
           
           const response = await axios.post(`${API_URL}/runs`, runData, config);
-          alert(`Run Saved! 🎉\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\nCalories: ${calories}`);
+          
+          if (response.data.success) {
+            alert(`Run Saved Successfully! 🎉\n\n` +
+                  `Distance: ${distance.toFixed(2)} km\n` +
+                  `Duration: ${formatTime(duration)}\n` +
+                  `Calories: ${calories}\n` +
+                  `Points: ${routeCoordinates.length}`);
+          }
         }
       } catch (error) {
-        console.error('Error saving run:', error);
-        console.error('Error details:', error.response?.data);
-        alert(`Run Complete!\nDistance: ${distance.toFixed(2)} km\nDuration: ${formatTime(duration)}\nCalories: ${calories}\n(Could not save to server: ${error.response?.data?.message || error.message})`);
+        console.error('❌ CREATE RUN ERROR:', error);
+        console.error('Error response:', error.response?.data);
+        
+        alert(`Run Complete!\n` +
+              `Distance: ${distance.toFixed(2)} km\n` +
+              `Duration: ${formatTime(duration)}\n` +
+              `Calories: ${calories}\n\n` +
+              `⚠️ Could not save to server:\n${error.response?.data?.message || error.message}`);
       }
     } else {
-      alert('No valid run data to save.');
+      alert('No valid run data to save. Run distance must be > 0 km.');
     }
   };
 
@@ -458,7 +471,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-900">
-      {/* Top Bar - Fixed with proper back button */}
+      {/* Top Bar */}
       <div className="absolute top-0 left-0 right-0 z-[1001] bg-gradient-to-r from-purple-900/95 to-pink-900/95 backdrop-blur-lg shadow-lg">
         <div className="flex items-center justify-between px-4 py-3">
           <motion.button
@@ -480,7 +493,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
         </div>
       </div>
 
-      {/* Stats Cards - Positioned correctly below header */}
+      {/* Stats Cards */}
       {isTracking && (
         <div className="absolute top-20 left-0 right-0 z-[1000] px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -578,7 +591,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
         </div>
       )}
 
-      {/* Map - Adjusted padding for stats */}
+      {/* Map */}
       <div className={`flex-1 w-full ${isTracking ? 'pt-60' : 'pt-20'} pb-32`}>
         <MapContainer
           center={defaultCenter}
@@ -642,7 +655,7 @@ const MapTracker = ({ isDarkMode, setCurrentPage, nearbyBoosts = [] }) => {
         </MapContainer>
       </div>
 
-      {/* Control Buttons - Fixed positioning */}
+      {/* Control Buttons */}
       <div className="absolute bottom-20 left-0 right-0 z-[1000] flex justify-center px-4">
         <div className="bg-white/95 backdrop-blur-lg rounded-full shadow-2xl p-3 flex gap-3">
           {!isTracking ? (
